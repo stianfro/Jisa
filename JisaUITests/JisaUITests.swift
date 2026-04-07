@@ -23,14 +23,12 @@ final class JisaUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testHomeScreenShowsTimezonePlaceholder() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["home.subtitle"].exists)
     }
 
     @MainActor
