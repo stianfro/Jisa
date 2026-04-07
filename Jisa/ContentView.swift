@@ -8,70 +8,136 @@
 import SwiftUI
 
 struct ContentView: View {
-    private let previewCities: [PreviewCity] = [
-        .init(name: "Tokyo", description: "UTC+9"),
-        .init(name: "Oslo", description: "UTC+1 / UTC+2"),
-        .init(name: "New York", description: "UTC-5 / UTC-4")
-    ]
+    @StateObject private var model = TimezoneOverviewModel()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Timezone workspace")
-                        .font(.largeTitle.bold())
-                        .accessibilityIdentifier("home.title")
-
-                    Text("A SwiftUI shell for comparing cities, offsets, and working hours across timezones. Implementation details will follow.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("home.subtitle")
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Planned starting points")
-                        .font(.headline)
-
-                    ForEach(previewCities) { city in
-                        HStack(spacing: 16) {
-                            Image(systemName: "globe.europe.africa.fill")
-                                .font(.title3)
-                                .foregroundStyle(.tint)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(city.name)
-                                    .font(.headline)
-                                Text(city.description)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "clock")
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                }
-
-                Spacer(minLength: 0)
+        NavigationStack {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                ContentList(model: model, now: context.date)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .navigationTitle("Jisa")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(.systemGroupedBackground))
     }
 }
 
-private struct PreviewCity: Identifiable {
-    let id = UUID()
-    let name: String
-    let description: String
+private struct ContentList: View {
+    @ObservedObject var model: TimezoneOverviewModel
+    let now: Date
+
+    var body: some View {
+        List {
+            statusSection
+            managementSection
+            timezoneSection
+        }
+        .listStyle(.insetGrouped)
+        .environment(\.editMode, .constant(model.isManagingTimeZones ? .active : .inactive))
+    }
+
+    private var statusSection: some View {
+        let status = model.status(now: now)
+
+        return Section {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(status.title)
+                    .font(.title3.weight(.semibold))
+                    .accessibilityIdentifier("timezone.status.title")
+
+                Text(status.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("timezone.status.detail")
+
+                if model.overrideDate != nil {
+                    Button("Back to now") {
+                        model.resetToNow()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("timezone.reset")
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var managementSection: some View {
+        Section {
+            Button(model.isManagingTimeZones ? "Done managing timezones" : "Manage timezones") {
+                withAnimation {
+                    model.toggleManagementMode()
+                }
+            }
+            .accessibilityIdentifier("timezone.manage")
+
+            if model.isManagingTimeZones {
+                TextField("Add timezone identifier", text: $model.searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("timezone.search")
+
+                let searchResults = model.searchResults()
+                if searchResults.isEmpty {
+                    Text("No matching timezone identifiers.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(searchResults, id: \.self) { id in
+                        Button {
+                            model.addTimeZone(id)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(id)
+                                if let timeZone = TimeZone(identifier: id) {
+                                    Text(TimeZoneDisplayFormatter().utcOffsetString(for: timeZone, at: now))
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("timezone.search-result.\(id.accessibilitySlug)")
+                    }
+                }
+            }
+        }
+    }
+
+    private var timezoneSection: some View {
+        Section("Timezones") {
+            let rows = model.rows(now: now)
+
+            if model.isManagingTimeZones {
+                ForEach(rows) { row in
+                    timezoneRow(row)
+                }
+                .onDelete(perform: model.removeTimeZones)
+                .onMove(perform: model.moveTimeZones)
+            } else {
+                ForEach(rows) { row in
+                    timezoneRow(row)
+                }
+            }
+        }
+    }
+
+    private func timezoneRow(_ row: TimezoneRowDisplay) -> some View {
+        TimezoneRowView(
+            row: row,
+            isManaging: model.isManagingTimeZones,
+            selection: Binding(
+                get: { model.overrideDate ?? now },
+                set: { model.applyOverride($0, for: row.id) }
+            ),
+            onDateTap: { model.beginEditing(.date, for: row.id) },
+            onTimeTap: { model.beginEditing(.time, for: row.id) }
+        )
+    }
 }
 
-#Preview {
-    ContentView()
+private extension String {
+    var accessibilitySlug: String {
+        unicodeScalars.map { scalar in
+            CharacterSet.alphanumerics.contains(scalar) ? String(scalar) : "-"
+        }
+        .joined()
+    }
 }

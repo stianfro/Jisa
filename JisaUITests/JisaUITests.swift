@@ -8,34 +8,63 @@
 import XCTest
 
 final class JisaUITests: XCTestCase {
-
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testHomeScreenShowsTimezonePlaceholder() throws {
-        let app = XCUIApplication()
-        app.launch()
+    func testMainScreenShowsDefaultTimezones() throws {
+        let app = launchApp()
 
-        XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.staticTexts["home.subtitle"].exists)
+        XCTAssertTrue(app.staticTexts["timezone.status.title"].waitForExistence(timeout: 2))
+        XCTAssertEqual(app.staticTexts["timezone.status.title"].label, "Live now")
+        XCTAssertTrue(app.staticTexts["timezone.row.UTC"].exists)
+        XCTAssertTrue(app.staticTexts["timezone.row.Europe-Oslo"].exists)
+        XCTAssertTrue(app.staticTexts["timezone.row.Asia-Tokyo"].exists)
+    }
+
+    @MainActor
+    func testManagingTimezonesShowsSearchAndCanAddResult() throws {
+        let app = launchApp()
+
+        app.buttons["timezone.manage"].tap()
+
+        let searchField = app.textFields["timezone.search"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 2))
+
+        searchField.tap()
+        searchField.typeText("New_York")
+
+        let result = app.buttons["timezone.search-result.America-New-York"]
+        XCTAssertTrue(result.waitForExistence(timeout: 2))
+        result.tap()
+
+        XCTAssertTrue(app.staticTexts["timezone.row.America-New-York"].waitForExistence(timeout: 2))
+    }
+
+    @MainActor
+    func testTappingDateShowsInlineDatePicker() throws {
+        let app = launchApp()
+
+        let dateField = app.buttons["timezone.date.UTC"]
+        XCTAssertTrue(dateField.waitForExistence(timeout: 2))
+        dateField.tap()
+
+        let datePicker = app.descendants(matching: .any)["timezone.date-picker.UTC"]
+        XCTAssertTrue(datePicker.waitForExistence(timeout: 2))
     }
 
     @MainActor
     func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            launchApp()
         }
+    }
+
+    @MainActor
+    private func launchApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launch()
+        return app
     }
 }
